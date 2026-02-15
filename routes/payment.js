@@ -10,7 +10,7 @@ router.post('/kofi', auth, async (req, res) => {
 
     // Update user points
     const user = await User.findById(req.user.id);
-    user.points += 10; // earn 10 points for payment
+    user.points += 100; // earn 100 points for payment
     user.payments.push({ amount, status: 'pending', date: new Date() });
     await user.save();
 
