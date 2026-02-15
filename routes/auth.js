@@ -1,44 +1,29 @@
-const express = require('express');
-const router = express.Router();
 const User = require('../models/User');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 
-// Signup
 router.post('/signup', async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, password, referrer } = req.body;
+
   try {
-    let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ msg: 'User exists' });
+    const existing = await User.findOne({ email });
+    if (existing) return res.status(400).json({ msg: 'Email already exists' });
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const newUser = new User({ username, email, password, points: 10 });
+    await newUser.save();
 
-    user = new User({ username, email, password: hashedPassword });
-    await user.save();
+    // Handle referral
+    if (referrer) {
+      const refUser = await User.findById(referrer);
+      if (refUser) {
+        refUser.points += 4; // 4 points per referral
+        refUser.referrals.push(newUser._id);
+        await refUser.save();
+      }
+    }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token, user: { id: user._id, username, email } });
+    const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token, user: { id: newUser._id, username, email, points: newUser.points } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
   }
 });
-
-// Login
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ msg: 'User not found' });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ msg: 'Invalid credentials' });
-
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token, user: { id: user._id, username: user.username, email } });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-module.exports = router;
